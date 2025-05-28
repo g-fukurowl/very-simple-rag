@@ -1,8 +1,3 @@
-以下が修正済みの **README.md** です。
-すべての `python very_simple_rag.py` を `uv run very_simple_rag.py` に置き換えました。
-
----
-
 # 🤖 Very Simple RAG — ローカルLLMによるシンプルな質問応答アプリ
 
 **Very Simple RAG** は、PDF/TXT/CSV ファイルからセマンティック検索を行い、ローカルLLM（Gemma）で質問応答を実現する「超シンプルな RAG（Retrieval-Augmented Generation）」アプリケーションです。
