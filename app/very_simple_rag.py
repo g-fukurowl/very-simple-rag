@@ -31,7 +31,7 @@ MODEL_PATH = os.path.join(SCRIPT_DIR_PATH, "models", GGUF_FILE_NAME)
 
 if os.path.exists(MODEL_PATH):
     # Llama インスタンスの生成
-    llm = Llama( # これミス。戻せ
+    llm = Llama(
         model_path=MODEL_PATH,
         n_ctx=12000,         # コンテキスト長（トークン）
         n_threads=4,        # 並列スレッド数
@@ -126,7 +126,7 @@ def load_vectorstore(persist_path="faiss_index",
 def search_faiss(query: str, k: int = 5):
     """FAISSでクエリ検索"""
     persist_path = "faiss_index"
-    vectorstore = load_vectorstore(persist_path)
+    vectorstore = load_vectorstore(persist_path, EMBEDDING_MODEL_PATH)
 
     print(f"🔍 Searching for: {query}")
     results = vectorstore.similarity_search(query, k=k)
