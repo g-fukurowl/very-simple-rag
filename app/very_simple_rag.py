@@ -9,6 +9,19 @@ import argparse
 import sys
 import os
 import shutil
+import logging
+from mcp.server.fastmcp import FastMCP
+
+# ロギングの設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("very_simple_rag")
+
+mcp = FastMCP("very-simple-rag-mcp")
+
+
 
 if getattr(sys, 'frozen', False):
     # PyInstallerでビルドされた実行環境
@@ -196,6 +209,31 @@ def setup():
     print(f"Moving: {path_to_hf_model_cache} -> {path_to_dst_model_dir}")
     shutil.move(path_to_hf_model_cache, path_to_dst_model_dir)
 
+
+@mcp.tool()
+async def semantic_search(query: str) -> str:
+    """事前に構築したベクターストアから情報を検索します。
+
+    Args:
+        query: セマンティック検索用のクエリ。調べたい事柄を文として入力してください。
+    """
+    logger.info(f"Received search query: {query}")
+    search_result = search_faiss(query, k=2)
+    if not search_result:
+        logger.warning("No results returned from FESS server")
+        return "検索結果が見つかりませんでした。"
+    
+    return str(search_result)
+
+def run_mcp_server():
+    """
+    MCPサーバーとして起動する
+    """
+    init()
+    logger.info("Starting MCP server...")
+    mcp.run(transport="sse")
+    logger.info("MCP server stopped.")
+
 def main():
     parser = argparse.ArgumentParser(description="Local LLM one‑shot Q&A with semantic vector retrieval.")
     subparsers = parser.add_subparsers(dest='command', required=True)
@@ -208,6 +246,10 @@ def main():
 
     # setup コマンド
     subparsers.add_parser('setup', help='セットアップを行います')
+
+    # run-mcp-server コマンド
+    subparsers.add_parser('run-mcp-server', help='セマンティック検索機能を持つMCPサーバーを起動します。')
+
 
     # 引数がない場合はヘルプを表示して終了
     if len(sys.argv) == 1:
@@ -223,6 +265,8 @@ def main():
         update_vector()
     elif args.command == 'setup':
         setup()
+    elif args.command == 'run-mcp-server':
+        run_mcp_server()
 
 
 if __name__ == "__main__":

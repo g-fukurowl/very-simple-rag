@@ -24,6 +24,7 @@
 | `uv run very_simple_rag.py setup`         | HuggingFace から LLM (`.gguf`) をダウンロードして `models/` に配置します |
 | `uv run very_simple_rag.py update-vector` | `data/` フォルダ内のファイルをベクトル化し、FAISS に保存します                  |
 | `uv run very_simple_rag.py run`           | クエリに基づいて検索・要約し、1問1答形式でGemmaが応答します                       |
+| `uv run very_simple_rag.py run-mcp-server`| MCPサーバモードで起動します。サーバプロセスは 127.0.0.1:8000 にて待ち受けます。クエリを受け取って検索結果をクライアントに返します |
 
 ---
 
