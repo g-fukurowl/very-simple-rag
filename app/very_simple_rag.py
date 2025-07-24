@@ -141,7 +141,7 @@ def search_faiss(query: str, k: int = 5):
     persist_path = "faiss_index"
     vectorstore = load_vectorstore(persist_path, EMBEDDING_MODEL_PATH)
 
-    print(f"🔍 Searching for: {query}")
+    print(f"# 🔍 Searching for: {query}")
     results = vectorstore.similarity_search(query, k=k)
 
     return results
@@ -172,7 +172,7 @@ def run():
     ワンショットのFAQを実行する。
     """
     init()
-    query = input("💬 Query: ")
+    query = input("# 💬 Query: ")
     search_result = search_faiss(query, k=2)
     search_result_str = ""
     for i, doc in enumerate(search_result, 1):
@@ -182,7 +182,7 @@ def run():
 
     prompt = f"### 指示 \nあなたは優秀なアシスタントAIです。常に日本語で応答します。質問「{query}」に簡潔に答えてください。その際、以下の情報を参照してください。\n\n### 情報 \n{search_result_str}\n\n\n\n"
     response = Fore.GREEN + chat(prompt) + Style.RESET_ALL
-    print("🤖Gemma:", response)
+    print("# 🤖Gemma:", response)
 
 def setup():
     """
@@ -250,6 +250,12 @@ def main():
     # run-mcp-server コマンド
     subparsers.add_parser('run-mcp-server', help='セマンティック検索機能を持つMCPサーバーを起動します。')
 
+    # search コマンド
+    search_command = subparsers.add_parser('search', help='セマンティック検索機能のみを実行します。')
+    search_command.add_argument('--query', type=str, help='検索クエリを入力してください。')
+    search_command.add_argument('--k', type=int, default=5, help='検索結果の数を指定します。デフォルトは5です。')
+
+
 
     # 引数がない場合はヘルプを表示して終了
     if len(sys.argv) == 1:
@@ -267,6 +273,23 @@ def main():
         setup()
     elif args.command == 'run-mcp-server':
         run_mcp_server()
+    elif args.command == 'search':
+        if not args.query:
+            print("Error: --query argument is required for search command.")
+            sys.exit(1)
+        if args.k <= 0:
+            print("Error: --k must be a positive integer.")
+            sys.exit(1)
+        result = search_faiss(args.query, args.k)
+        if not result:
+            print("検索結果が見つかりませんでした")
+        else:
+            for i, doc in enumerate(result, 1):
+                # もし doc.page_content が 30文字以下ならば、表示しない
+                if len(doc.page_content) <= 30:
+                    continue
+                print(f"## Result {i}\n### Page Content \n{doc.page_content}\n\n### Metadata \n{doc.metadata}")
+                print("\n-----------------------------------------------\n")
 
 
 if __name__ == "__main__":
