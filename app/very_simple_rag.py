@@ -182,7 +182,7 @@ def run():
 
     prompt = f"### 指示 \nあなたは優秀なアシスタントAIです。常に日本語で応答します。質問「{query}」に簡潔に答えてください。その際、以下の情報を参照してください。\n\n### 情報 \n{search_result_str}\n\n\n\n"
     response = Fore.GREEN + chat(prompt) + Style.RESET_ALL
-    print("# 🤖Gemma:", response)
+    print("# 🤖 Assistant AI:", response)
 
 def setup():
     """
