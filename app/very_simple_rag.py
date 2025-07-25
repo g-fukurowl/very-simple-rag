@@ -11,6 +11,10 @@ import os
 import shutil
 import logging
 from mcp.server.fastmcp import FastMCP
+import io
+#import cProfile
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # ロギングの設定
 logging.basicConfig(
@@ -21,8 +25,6 @@ logger = logging.getLogger("very_simple_rag")
 
 mcp = FastMCP("very-simple-rag-mcp")
 
-
-
 if getattr(sys, 'frozen', False):
     # PyInstallerでビルドされた実行環境
     SCRIPT_DIR_PATH = os.path.dirname(sys.executable)
@@ -32,13 +34,17 @@ else:
 
 # HuggingFace上にアップロードされているembeddingモデル名
 EMBEDDING_MODEL_PATH = "intfloat/multilingual-e5-large-instruct"
+DEVICE = "cpu" 
+# 埋め込みモデルのロード。時間がかかる
+embeddings = HuggingFaceEmbeddings(
+    model_name=EMBEDDING_MODEL_PATH,
+    model_kwargs={"device": DEVICE},
+)
 
 # HuggingFace上にアップロードされているLLMのリポジトリ名
 HF_REPO_NAME = "lmstudio-community/gemma-3-1B-it-qat-GGUF"
-
 # ダウンロードしたいLLMのggufファイル名（大文字・小文字を正確に）
 GGUF_FILE_NAME = "gemma-3-1B-it-QAT-Q4_0.gguf"
-
 # ダウンロードした GGUF ファイルへのパス
 MODEL_PATH = os.path.join(SCRIPT_DIR_PATH, "models", GGUF_FILE_NAME)
 
@@ -75,7 +81,7 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=0.1):
 def embed_and_store(
     raw_docs,
     model_name=EMBEDDING_MODEL_PATH,
-    device="cpu",
+    device=DEVICE,
     persist_path="faiss_index"
 ):
     # ステップ1: 生ドキュメント数を検証
@@ -91,10 +97,8 @@ def embed_and_store(
     if not docs:
         raise ValueError("All chunks are empty after filtering.")
     # ステップ4: 埋め込みモデルの準備
-    embeddings = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": device},
-    )
+    # 冒頭で初期化済み
+
     # ステップ5: FAISS に格納
     vectorstore = FAISS.from_documents(docs, embeddings)
     vectorstore.save_local(persist_path)
@@ -113,7 +117,7 @@ def update_vector():
     faiss_store = embed_and_store(
         raw_docs,
         model_name=EMBEDDING_MODEL_PATH,
-        device="cpu",
+        device=DEVICE,
         persist_path="faiss_index"
     )
     print(f"Indexed into FAISS at 'faiss_index'")
@@ -122,12 +126,9 @@ def update_vector():
 # あらかじめ作っておいたベクターストアをロード
 def load_vectorstore(persist_path="faiss_index",
                      model_name="intfloat/multilingual-e5-large-instruct",
-                     device="cpu"):
+                     device=DEVICE):
     """保存済みFAISSインデックスと埋め込みモデルをロード"""
-    embeddings = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": device},
-    )
+
     vectorstore = FAISS.load_local(
         persist_path,
         embeddings,
@@ -141,7 +142,7 @@ def search_faiss(query: str, k: int = 5):
     persist_path = "faiss_index"
     vectorstore = load_vectorstore(persist_path, EMBEDDING_MODEL_PATH)
 
-    print(f"# 🔍 Searching for: {query}")
+    print(f"# Searching for: {query}")
     results = vectorstore.similarity_search(query, k=k)
 
     return results
@@ -172,7 +173,7 @@ def run():
     ワンショットのFAQを実行する。
     """
     init()
-    query = input("# 💬 Query: ")
+    query = input("# Query: ")
     search_result = search_faiss(query, k=2)
     search_result_str = ""
     for i, doc in enumerate(search_result, 1):
@@ -182,7 +183,7 @@ def run():
 
     prompt = f"### 指示 \nあなたは優秀なアシスタントAIです。常に日本語で応答します。質問「{query}」に簡潔に答えてください。その際、以下の情報を参照してください。\n\n### 情報 \n{search_result_str}\n\n\n\n"
     response = Fore.GREEN + chat(prompt) + Style.RESET_ALL
-    print("# 🤖 Assistant AI:", response)
+    print("# Assistant AI:", response)
 
 def setup():
     """
@@ -293,4 +294,5 @@ def main():
 
 
 if __name__ == "__main__":
+    #cProfile.run('main()')
     main()
