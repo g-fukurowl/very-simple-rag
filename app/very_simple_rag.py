@@ -255,6 +255,7 @@ def main():
     search_command = subparsers.add_parser('search', help='セマンティック検索機能のみを実行します。')
     search_command.add_argument('--query', type=str, help='検索クエリを入力してください。')
     search_command.add_argument('--k', type=int, default=5, help='検索結果の数を指定します。デフォルトは5です。')
+    search_command.add_argument('--interactive',  action='store_true', help='対話型モードで検索のみ実行します')
 
 
 
@@ -278,19 +279,39 @@ def main():
         if not args.query:
             print("Error: --query argument is required for search command.")
             sys.exit(1)
+        query = args.query
+
         if args.k <= 0:
             print("Error: --k must be a positive integer.")
             sys.exit(1)
-        result = search_faiss(args.query, args.k)
-        if not result:
-            print("検索結果が見つかりませんでした")
-        else:
-            for i, doc in enumerate(result, 1):
-                # もし doc.page_content が 30文字以下ならば、表示しない
-                if len(doc.page_content) <= 30:
-                    continue
-                print(f"## Result {i}\n### Page Content \n{doc.page_content}\n\n### Metadata \n{doc.metadata}")
-                print("\n-----------------------------------------------\n")
+        k = args.k
+
+        while True:
+            if not query:
+                query = input("Enter your search query: ")
+            if not query.strip():
+                print("Query cannot be empty. Please enter a valid query.")
+                continue
+            
+            print(f"Searching for: {query} with k={k}")
+             # 検索を実行
+            result = search_faiss(query, k)
+            if not result:
+                print("検索結果が見つかりませんでした")
+            else:
+                for i, doc in enumerate(result, 1):
+                    # もし doc.page_content が 30文字以下ならば、表示しない
+                    if len(doc.page_content) <= 30:
+                        continue
+                    print(f"## Result {i}\n### Page Content \n{doc.page_content}\n\n### Metadata \n{doc.metadata}")
+                    print("\n-----------------------------------------------\n")
+            if args.interactive != True:
+                break
+
+            query = input("Enter your next search query (or press Enter to exit): ")
+            if not query.strip():
+                print("Exiting search mode.")
+                break
 
 
 if __name__ == "__main__":
