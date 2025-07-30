@@ -2,7 +2,7 @@ from llama_cpp import Llama
 from colorama import Fore, Style, init
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import PyPDFLoader, TextLoader, CSVLoader
+from langchain_community.document_loaders import PyMuPDFLoader, TextLoader, CSVLoader
 from langchain.text_splitter import CharacterTextSplitter
 from huggingface_hub import hf_hub_download
 import argparse
@@ -12,6 +12,8 @@ import shutil
 import logging
 from mcp.server.fastmcp import FastMCP
 import io
+import torch
+import pyperclip
 #import cProfile
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -33,12 +35,36 @@ else:
     SCRIPT_DIR_PATH = os.path.dirname(os.path.abspath(__file__))
 
 # HuggingFace上にアップロードされているembeddingモデル名
-EMBEDDING_MODEL_PATH = "intfloat/multilingual-e5-large-instruct"
-DEVICE = "cpu" 
+#EMBEDDING_MODEL_PATH = "intfloat/multilingual-e5-large-instruct"
+EMBEDDING_MODEL_PATH = "Qwen/Qwen3-Embedding-0.6B"
+EMBEDDING_CHUNK_SIZE = 400 # 文字数
+EMBEDDING_CHUNK_OVERLAP = 40 # チャンクの重複部分の文字数
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_KWARGS = {
+    'device': DEVICE,  # "cpu" または "cuda" を指定
+    'model_kwargs': {
+        'device_map': 'auto',  # 自動でデバイスマップを設定
+        'low_cpu_mem_usage': False,  # CPUメモリ使用量を抑える,
+        'torch_dtype': torch.float16 if DEVICE == "cuda" else torch.float32,
+    },
+    'tokenizer_kwargs': {
+        "padding_side": "left"
+    },
+}
+# VRAMEの消費量を抑えるようなパラメータにする
+ENCODE_KWARGS = {
+    'prompt_name': 'query',
+    'batch_size': 4,  # バッチサイズを調整
+    'convert_to_tensor' : True,  # テンソルに変換しない
+    'normalize_embeddings': True,  # 埋め込みを正規化する
+    'device': DEVICE,  # "cpu" または "cuda" を指定
+    'use_fast': True,  # 高速なトークナイザを使用
+}
 # 埋め込みモデルのロード。時間がかかる
 embeddings = HuggingFaceEmbeddings(
     model_name=EMBEDDING_MODEL_PATH,
-    model_kwargs={"device": DEVICE},
+    model_kwargs=MODEL_KWARGS,
+    encode_kwargs=ENCODE_KWARGS,
 )
 
 # HuggingFace上にアップロードされているLLMのリポジトリ名
@@ -63,7 +89,7 @@ else:
 # ベクトル化したいドキュメントをロードする
 def load_documents(file_path: str):
     if file_path.lower().endswith(".pdf"):
-        loader = PyPDFLoader(file_path)
+        loader = PyMuPDFLoader(file_path)
     elif file_path.lower().endswith(".txt"):
         loader = TextLoader(file_path, encoding="utf-8")
     elif file_path.lower().endswith(".csv"):
@@ -88,8 +114,8 @@ def embed_and_store(
     if not raw_docs:
         raise ValueError("No documents to embed. Check loader output.")
     # ステップ2: チャンク生成
-    docs = split_documents(raw_docs, 100)
-    print(raw_docs)
+    print("# Splitting documents into chunks...")
+    docs = split_documents(raw_docs, chunk_size=EMBEDDING_CHUNK_SIZE, chunk_overlap=EMBEDDING_CHUNK_OVERLAP)
     # デバッグ出力
     print(f"Generated {len(docs)} chunks")
     # ステップ3: 空チャンクの除外
@@ -219,7 +245,7 @@ async def semantic_search(query: str) -> str:
         query: セマンティック検索用のクエリ。調べたい事柄を文として入力してください。
     """
     logger.info(f"Received search query: {query}")
-    search_result = search_faiss(query, k=2)
+    search_result = search_faiss(query, k=5)
     if not search_result:
         logger.warning("No results returned from FESS server")
         return "検索結果が見つかりませんでした。"
@@ -256,6 +282,7 @@ def main():
     search_command.add_argument('--query', type=str, help='検索クエリを入力してください。')
     search_command.add_argument('--k', type=int, default=5, help='検索結果の数を指定します。デフォルトは5です。')
     search_command.add_argument('--interactive',  action='store_true', help='対話型モードで検索のみ実行します')
+    search_command.add_argument('--clip',  action='store_true', help='最新の検索結果をクリップボードにコピーします')
 
 
 
@@ -295,6 +322,7 @@ def main():
             
             print(f"Searching for: {query} with k={k}")
              # 検索を実行
+            output = ""
             result = search_faiss(query, k)
             if not result:
                 print("検索結果が見つかりませんでした")
@@ -303,8 +331,18 @@ def main():
                     # もし doc.page_content が 30文字以下ならば、表示しない
                     if len(doc.page_content) <= 30:
                         continue
-                    print(f"## Result {i}\n### Page Content \n{doc.page_content}\n\n### Metadata \n{doc.metadata}")
-                    print("\n-----------------------------------------------\n")
+                    output = output + "\n-----------------------------------------------\n"
+                    output = output + f"## Result {i}\n### Page Content \n{doc.page_content}\n\n)\n### Metadata \n"
+                    for key, value in doc.metadata.items():
+                        output = output + f"{key}: {value}\n"
+            print(output)   
+
+            if args.clip:
+                try:
+                    pyperclip.copy(output)
+                    print("検索結果をクリップボードにコピーしました。")
+                except ImportError:
+                    print("pyperclipがインストールされていません。クリップボードへのコピーはできませんでした。")
             if args.interactive != True:
                 break
 

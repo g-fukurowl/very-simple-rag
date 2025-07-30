@@ -1,18 +1,20 @@
 # 🤖 Very Simple RAG — ローカルLLMによるシンプルな質問応答アプリ
 
-**Very Simple RAG** は、PDF/TXT/CSV ファイルからセマンティック検索を行い、ローカルLLM（Gemma）で質問応答を実現する「超シンプルな RAG（Retrieval-Augmented Generation）」アプリケーションです。
+**Very Simple RAG** は、PDF/TXT/CSV ファイルからセマンティック検索を行う、超シンプルな RAG（Retrieval-Augmented Generation）向けツールです。
 
 > LangChain + HuggingFace + llama.cpp + FAISS による構成。
 > すべてローカルで動作し、インターネット接続なしでも利用できます。
+> MCPサーバーとして動作させることも可能です。
 
 ---
 
 ## ✅ 特徴
 
-* 🔍 **意味検索対応**：ドキュメントを意味的に分割・検索（FAISS）
-* 🧠 **ローカルLLMで応答**：Gemma（GGUF形式）で自然言語の回答生成
+* 🔍 **意味検索対応**：ドキュメントを意味的に分割・検索
+* 🧠 **ローカル埋め込みモデル**：HFに公開されているオープンな埋め込みモデルをローカル環境で利用
 * 📄 **対応ファイル形式**：`.pdf`, `.txt`, `.csv`
 * 💾 **インデックス永続化**：FAISS による高速な再検索が可能
+* 🤖 **MCPサーバモード**：MCPサーバーとして動作させることも可能。セマンティック検索ベースのRAGに対応
 * 🛠 **PyInstaller対応済み**：CLIツールとして単体バイナリ化可能
 
 ---
@@ -21,11 +23,9 @@
 
 | コマンド                                      | 説明                                                      |
 | ----------------------------------------- | ------------------------------------------------------- |
-| `uv run very_simple_rag.py setup`         | HuggingFace から LLM (`.gguf`) をダウンロードして `models/` に配置します |
 | `uv run very_simple_rag.py update-vector` | `data/` フォルダ内のファイルをベクトル化し、FAISS に保存します                  |
-| `uv run very_simple_rag.py run`           | クエリに基づいて検索・要約し、1問1答形式でGemmaが応答します                       |
-| `uv run very_simple_rag.py run-mcp-server`| MCPサーバモードで起動します。サーバプロセスは 127.0.0.1:8000 にて待ち受けます。クエリを受け取って検索結果をクライアントに返します |
 | `uv run very_simple_rag.py search`| 検索のみを実行します。クエリを `--query` オプション、検索結果の数を `--k` オプションで指定可能です。 |
+| `uv run very_simple_rag.py run-mcp-server`| MCPサーバモードで起動します。サーバプロセスは 127.0.0.1:8000 にて待ち受けます。クエリを受け取って検索結果をクライアントに返します |
 
 ---
 
@@ -34,66 +34,52 @@
 ### 1. ライブラリのインストール
 
 [**uv**](https://github.com/astral-sh/uv) を使って高速・依存関係解決付きでインストールできます。
-
-```bash
-uv pip install .
-```
-
-> `pyproject.toml` に定義された依存がインストールされます。
-
-※ 事前に `uv` をインストールしていない場合は以下で導入できます：
+事前に `uv` をインストールしていない場合は以下で導入できます：
 
 ```bash
 pip install uv
 ```
-
----
-
-### 2. モデルのダウンロード
-
+LLM の動作に CUDA を利用したい場合は下記のコマンドで依存関係をインストールしてください。
 ```bash
-uv run very_simple_rag.py setup
+uv sync --extra cuda
+```
+CPUを利用したい場合は下記の方法でインストールしてください。
+```bash
+uv sync --extra cpu
 ```
 
-> モデル：`lmstudio-community/gemma-3-1B-it-qat-GGUF`
-> 保存先：`models/gemma-3-1B-it-QAT-Q4_0.gguf`
-> ※ Hugging Face のアクセストークン（環境変数 `HF_TOKEN`）が必要です
 
 ---
 
-### 3. ドキュメントの配置とベクトル化
+### 2. ドキュメントの配置とベクトル化～ベクターストアに格納
+dataフォルダの下に配置されたドキュメント群をすべてチャンク分割して埋め込みを行います。
 
 ```bash
 mkdir data
-# → data に .pdf/.txt/.csv を配置
+# → data に １つ以上の.pdf/.txt/.csv を配置してください
 uv run very_simple_rag.py update-vector
 ```
+
+完了するとFAISSのインデックスフォルダが作成されます。
+大量のドキュメントについて update-vector を完了するには長い時間が必要になる場合があるため、注意してください。
 
 ---
 
 ### 4. 実行と応答確認
+下記のコマンドによって "This is a test query." という自然文のクエリでセマンティック検索を行います。
+2つまでの検索結果を返すように指定しています。
 
 ```bash
-uv run very_simple_rag.py run
+uv run very_simple_rag.py search --interactive --query "This is a test query." --k 2
 ```
 
-クエリを入力すると、検索結果をもとにGemmaが回答を生成します。
+検索結果が返ると、続けてクエリの入力を要求されます。何も入力せずにEnterキーを押すか、Ctrl-Cによって終了できます。
 
 ---
 
 ## ⚙ PyInstallerによる実行ファイル化
 
 このスクリプトは PyInstaller に対応しており、　build.bat でスタンドアロン実行形式に変換できます。
-
-
----
-
-## 📌 使用モデル情報
-
-| 種別        | モデル名                                                                                                            |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| LLM       | [`lmstudio-community/gemma-3-1B-it-qat-GGUF`](https://huggingface.co/lmstudio-community/gemma-3-1B-it-qat-GGUF) |
-| Embedding | [`intfloat/multilingual-e5-large-instruct`](https://huggingface.co/intfloat/multilingual-e5-large-instruct)     |
 
 ---
 
@@ -107,4 +93,5 @@ uv run very_simple_rag.py run
 
 * 初回実行時はモデルとインデックス構築に時間がかかります。
 * すべてローカルで動作するため、プライバシー性の高い利用にも適しています。
+* CUDA 利用時の動作確認は Windows 11 + Intel Core i7-8750H + NVIDIA GTX 1650 + CUDA Tool kit 12.8 の環境で行いました
 
